@@ -2,22 +2,37 @@
 import collections, copy, threading, itertools, re, urllib.parse
 
 
+class NotEmpty (Exception):
+
+    def __init__ (self):
+        self.value = 'xArray need to empty to register or change key types.'
+
+    def __repr__ (self):
+        return str(self.value)
+
 class xArray (object):
 
+
+    """
+        eXtended Array, accepts dict and lists as key by default and can register functions to add more
+        Accepts insertion php like via [ None ], .insert, str2int and float2int
+        Thread-safe insertion via .sync and .async functions
+    """
+
     @staticmethod
-    def __isDict (value):
+    def ___is_dict (value):
         return isinstance(value, dict) or isinstance(value, collections.UserDict)
 
     @staticmethod
-    def __isList (value):
+    def ___is_list (value):
         return isinstance(value, list) or isinstance(value, collections.UserList)
 
     @staticmethod
-    def __isSet (value):
+    def ___is_set (value):
         return isinstance(value, set)
 
     @staticmethod
-    def __isTuple (value):
+    def ___is_tuple (value):
         return isinstance(value, tuple)
 
     @staticmethod
@@ -25,84 +40,43 @@ class xArray (object):
         return isinstance(value, xArray)
 
     @staticmethod
-    def __quoteQuery (query, wrap):
-        return urllib.parse.quote_plus(('[{0}]' if wrap else '{0}').format(query))
+    def ___to_query (data, _first = True, _accum = ''):
+        if xArray.__isXArray(data) or xArray.___is_dict(data):
+            key_format = '{0}' if _first else '[{0}]'
+            return '&'.join(xArray.___to_query(val, False, _accum + urllib.parse.quote_plus(key_format.format(key))) for key, val in data.items())
+
+        elif xArray.___is_list(data) or xArray.___is_tuple(data) or xArray.___is_set(data):
+            key_format = '{0}' if _first else '[{0}]'
+            return '&'.join(xArray.___to_query(val, False, _accum + urllib.parse.quote_plus(key_format.format(key))) for key, val in enumerate(data))
+
+        return _accum + '=' + urllib.parse.quote_plus(str(data))
 
     @staticmethod
-    def __queryTuple (key, val, accum):
-        return xArray.__toQuery(data = val, _first = False, _accum = accum)
-
-    @staticmethod
-    def __toQuery (data, _first = True, _accum = ''):
-        if xArray.__isXArray(data) or xArray.__isDict(data):
-            return '&'.join(xArray.__queryTuple(key, val, _accum + xArray.__quoteQuery(key, not _first)) for key, val in data.items())
-        elif xArray.__isList(data) or xArray.__isTuple(data) or xArray.__isSet(data):
-            return '&'.join(xArray.__queryTuple(key, val, _accum + xArray.__quoteQuery(key, not _first)) for key, val in enumerate(data))
-        return _accum + '=' + xArray.__quoteQuery(str(data), False)
-
-    @staticmethod
-    def fromQuery (query):
-        result = xArray(convert_str = True)
-        for value in query.split('&'):
-
-            indexes = []
-            arg, val = (value + '=').split('=', 1)
-
-            arg = urllib.parse.unquote_plus(arg)
-            val = urllib.parse.unquote_plus(val)
-
-            match_arrays = xArray.query_match_arrays.search(arg)
-
-            if match_arrays is not None:
-                start, end = match_arrays.span()
-                arrays = arg[ start : end ]
-                arg = arg[ : start ]
-
-                start = 1
-
-                while True:
-
-                    end = arrays.find(']', start)
-
-                    if end < 0:
-                        break
-
-                    indexes.append(arrays[ start : end ] if start < end else None)
-                    start = end + 2
-
-            result.set(val[ : -1 ], arg, *indexes)
-        return result
-
-    @staticmethod
-    def recursivePack (data):
+    def pack_recursive (data):
         data_type = type(data)
-        if xArray.__isDict(data):
+        if xArray.___is_dict(data):
             result = []
             for key in sorted(data):
-                result.append(xArray.recursivePack( ( key, data[key] ) ))
+                result.append(xArray.pack_recursive( ( key, data[key] ) ))
             data = tuple(result)
-        elif xArray.__isList(data) or xArray.__isSet(data) or xArray.__isTuple(data):
+        elif xArray.___is_list(data) or xArray.___is_set(data) or xArray.___is_tuple(data):
             result = []
             for value in data:
-                result.append(xArray.recursivePack(value))
+                result.append(xArray.pack_recursive(value))
             data = tuple(result)
         elif xArray.__isXArray(data):
-            data = data.__pack()
+            data = data.___pack()
         return ( data_type, data )
 
     def __enter__ (self):
-        self.__sync_lock.acquire()
-        if self.__sync:
-            self.__data_lock.acquire()
+        self.lock()
         return self
 
     def __exit__ (self, _, __, ___):
-        if self.__sync:
-            self.__data_lock.release()
-        self.__sync_lock.release()
+        self.unlock()
         return False
 
-    def __getIndex (self, key, get_used = False):
+    def ___get_index (self, key, get_used = False):
         key_type = type(key)
         key_used = key
 
@@ -128,32 +102,28 @@ class xArray (object):
 
         return ( index, key_type, key_used ) if get_used else ( index, key_type )
 
-    def __pack (self):
-        return xArray.recursivePack( self.__getState() )
+    def ___pack (self):
+        return xArray.pack_recursive( self.___get_state() )
 
-    def __setState (self, data, reg_types, index):
-        with self:
-            self.__data = data
-            self.__local_registered_types = reg_types
-            self.__next = index
+    def ___set_state (self, data, reg_types, index):
+        self.__data = data
+        self.__local_registered_types = reg_types
+        self.__next = index
 
-    def __setFlags (self, sync, str2int, float2int):
+    def ___set_flags (self, sync, str2int, float2int):
         self.__sync = sync
         self.__str2int = str2int
         self.__float2int = float2int
 
-    def __getState (self):
-        with self:
-            return ( self.__data, self.__local_registered_types, self.__next )
+    def ___get_state (self):
+        return ( self.__data, self.__local_registered_types, self.__next )
 
-    def __init__ (self, *args, **kwargs):
+    def __init__ (self, *args, is_sync = False, convert_str = False, convert_float = False, **kwargs):
 
-        self.__sync_lock = threading.RLock()
-        self.__next_lock = threading.RLock()
         self.__data_lock = threading.RLock()
 
-        self.__setFlags(kwargs.pop('is_sync', False), kwargs.pop('convert_str', False), kwargs.pop('convert_float', False))
-        self.__setState({}, {}, 0)
+        self.___set_flags(is_sync, convert_str, convert_float)
+        self.___set_state({}, {}, 0)
 
         for val in args:
             self[None] = val
@@ -161,43 +131,33 @@ class xArray (object):
         for arg, val in kwargs.items():
             self[arg] = val
 
-    def sync (self):
-        with self.__sync_lock:
-            self.__sync = True
+    def lock (self):
+        self.__data_lock.acquire()
 
-    def async (self):
-        with self.__sync_lock:
-            self.__sync = False
-
-    def convertString (self):
-        self.__str2int = True
-
-    def keepString (self):
-        self.__str2int = False
-
-    def convertFloat (self):
-        self.__float2int = True
-
-    def keepFloat (self):
-        self.__float2int = False
+    def unlock (self):
+        self.__data_lock.release()
 
     def register (self, reg, to_key):
-        self.__local_registered_types[reg] = to_key
+        if len(self) is 0:
+            self.__local_registered_types[reg] = to_key
+        else:
+            raise NotEmpty()
 
-    def set (self, value, index, *indexes):
+    def insert (self, value, *indexes):
 
         location = self
-        extra = len(indexes)
+        children = len(indexes)
 
-        if extra is 0:
-            last = index
+        if children is 0:
+            last = None
         else:
-            extra -= 1
-            last = indexes[extra]
+            children -= 1
+            last = indexes[children]
 
-            for key in itertools.chain([ index ], itertools.islice(indexes, None, extra)):
+            for key in itertools.islice(indexes, None, children):
                 if key not in location:
-                    xarray = xArray(is_sync = self.__sync, convert_str = self.__str2int, convert_float = self.__float2int)
+                    xarray = xArray()
+                    xarray.___set_flags(self.__sync, self.__str2int, self.__float2int)
                     location[key] = xarray
                     location = xarray
                 else:
@@ -205,24 +165,26 @@ class xArray (object):
 
         location[last] = value
 
-    def toQuery (self):
-        return xArray.__toQuery(self)
-
-    def keys (self):
-        return set(self)
-
     def items (self):
         for _, ( key, val ) in self.__data.items():
             yield ( copy.deepcopy(key), val )
 
+    @property
+    def keys (self):
+        return set(self)
+
+    @property
+    def query (self):
+        return xArray.___to_query(self)
+
     def __deepcopy__ (self, memo):
         xarray = xArray(is_sync = self.__sync, convert_str = self.__str2int, convert_float = self.__float2int)
-        xarray.__setState(copy.deepcopy(self.__data, memo), copy.deepcopy(self.__local_registered_types, memo), self.__next)
+        xarray.___set_state(copy.deepcopy(self.__data, memo), copy.deepcopy(self.__local_registered_types, memo), self.__next)
         return xarray
 
     def __copy__ (self):
         xarray = xArray(is_sync = self.__sync, convert_str = self.__str2int, convert_float = self.__float2int)
-        xarray.__setState(copy.copy(self.__data), copy.deepcopy(self.__local_registered_types), self.__next)
+        xarray.___set_state(copy.copy(self.__data), copy.deepcopy(self.__local_registered_types), self.__next)
         return xarray
 
     def __iter__ (self):
@@ -230,7 +192,7 @@ class xArray (object):
             yield key
 
     def __len__ (self):
-        return self.__data.__len__()
+        return len(self.__data)
 
     def __eq__ (self, other):
         if type(other) is xArray and len(self) == len(other):
@@ -238,7 +200,7 @@ class xArray (object):
                 try:
                     if other[key] != val:
                         return False
-                except KeyError:
+                except:
                     return False
             return True
         return False
@@ -246,60 +208,87 @@ class xArray (object):
     def __setitem__ (self, key, value):
 
         if key is None:
-            with self.__next_lock:
-                index = self.__next
-                self.__next += 1
+            index = self.__next
+            self.__next += 1
             key = index
             key_type = int
         else:
-            index, key_type, key = self.__getIndex(key, True)
+            index, key_type, key = self.___get_index(key, True)
 
-            with self.__next_lock:
-                if key_type is int and key >= self.__next:
-                    self.__next = key + 1
+            if key_type is int and key >= self.__next:
+                self.__next = key + 1
 
         pair = ( copy.deepcopy(key), value )
 
-        with self:
-            self.__data[( index, key_type )] = pair
+        self.__data[( index, key_type )] = pair
 
     def __getitem__ (self, key):
-
-        with self:
-            with self.__next_lock:
-                if key is None:
-                    key = self.__next - 1
+            if key is None:
+                key = self.__next - 1
 
             try:
-                return self.__data[self.__getIndex(key)][1]
+                return self.__data[self.___get_index(key)][1]
             except KeyError:
                 raise KeyError(key)
 
     def __delitem__ (self, key):
-        with self:
-            try:
-                del self.__data[self.__getIndex(key)]
-            except KeyError:
-                raise KeyError(key)
+        try:
+            del self.__data[self.___get_index(key)]
+        except KeyError:
+            raise KeyError(key)
 
     def __contains__ (self, key):
-        return self.__getIndex(key) in self.__data
+        return self.___get_index(key) in self.__data
 
     def __str__ (self):
         return '{ ' + ', '.join('{0}: {1}'.format(repr(key), repr(val)) for key, val in self.items()) + ' }'
 
     def __repr__ (self):
-        return self.__str__()
+        return str(self)
 
     def __hash__ (self):
-        return self.__pack().__hash__()
+        return hash(self.___pack())
 
 xArray.default_registered_types = {
-    list   : (lambda x: xArray.recursivePack(x)),
-    dict   : (lambda x: xArray.recursivePack(x)),
-    set    : (lambda x: xArray.recursivePack(x)),
-    tuple  : (lambda x: xArray.recursivePack(x)),
-    xArray : (lambda x: xArray.recursivePack(x))
+    list   : xArray.pack_recursive,
+    dict   : xArray.pack_recursive,
+    set    : xArray.pack_recursive,
+    tuple  : xArray.pack_recursive,
+    xArray : xArray.pack_recursive
 }
 
-xArray.query_match_arrays = re.compile(r'(?:\[[^\]]*?\])+$')
+def from_query (query):
+    result = xArray(convert_str = True)
+    for value in from_query.query_split_keys.split(query):
+
+        if value:
+            indexes = []
+            arg, val = (value + '=').split('=', 1)
+
+            arg = urllib.parse.unquote_plus(arg)
+            val = urllib.parse.unquote_plus(val)
+
+            match_arrays = from_query.query_match_arrays.search(arg)
+
+            if match_arrays is not None:
+                start, end = match_arrays.span()
+                arrays = arg[ start : end ]
+                arg = arg[ : start ]
+
+                start = 1
+
+                while True:
+
+                    end = arrays.find(']', start)
+
+                    if end < 0:
+                        break
+
+                    indexes.append(arrays[ start : end ] if start < end else None)
+                    start = end + 2
+
+            result.insert(val[ : -1 ], arg, *indexes)
+    return result
+
+from_query.query_match_arrays = re.compile(r'(?:\[[^\]]*?\])+$')
+from_query.query_split_keys = re.compile(r'[&;]+')
