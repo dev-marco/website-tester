@@ -136,7 +136,7 @@ def read_rules (name, urls):
     with open(name, 'r', encoding = 'utf-8') as rules_file:
         for line in rules_file:
             line = line.rstrip('\n\r')
-            if line[0] != '#':
+            if line and line[0] != '#':
                 rules.append(line)
 
     return compile_rules(rules, urls)
