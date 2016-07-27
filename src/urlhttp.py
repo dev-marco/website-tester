@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import xarray, collections, urllib.parse, copy, os
+import xarray, urllib.parse, copy, os
 
 
 class URLHttp (object):
@@ -17,111 +17,95 @@ class URLHttp (object):
             if not url_data.hostname and force_absolute:
                 raise ValueError('URL without address with force_absolute enabled.')
 
-        scheme = ''
+        self.__scheme = ''
 
         if url_data.scheme != 'http' and url_data.scheme != 'https':
             if force_absolute or url_data.scheme:
-                raise ValueError('Invalid scheme.')
+                raise ValueError('Invalid self.__scheme.')
         else:
-            scheme = 'https' if (force_ssl and force_absolute) else url_data.scheme
+            self.__scheme = 'https' if (force_ssl and force_absolute) else url_data.scheme
 
-        username = urllib.parse.unquote_plus(url_data.username or '')
-        username_encoded = urllib.parse.quote_plus(username)
+        self.__username = urllib.parse.unquote_plus(url_data.username or '')
+        self.__username_encoded = urllib.parse.quote_plus(self.__username)
 
-        password = urllib.parse.unquote_plus(url_data.password or '')
-        password_encoded = urllib.parse.quote_plus(password)
+        self.__password = urllib.parse.unquote_plus(url_data.password or '')
+        self.__password_encoded = urllib.parse.quote_plus(self.__password)
 
-        port = str(url_data.port or '')
+        self.__port = str(url_data.port or '80')
 
-        hostname = url_data.hostname or ''
-        hostname_encoded = '.'.join(x.encode('idna').decode('ascii') for x in hostname.split('.')).lower()
+        self.__hostname = url_data.hostname or ''
+        self.__hostname_encoded = '.'.join(x.encode('idna').decode('ascii') for x in self.__hostname.split('.')).lower()
 
-        path = url_data.path or ''
-        query = (use_query and url_data.query) or ''
+        self.__path = url_data.path or ''
+        self.__query = (use_query and url_data.query) or ''
 
-        fragment = urllib.parse.unquote_plus((use_fragment and url_data.fragment) or '')
-        fragment_encoded = urllib.parse.quote_plus(fragment)
+        self.__fragment = urllib.parse.unquote_plus((use_fragment and url_data.fragment) or '')
+        self.__fragment_encoded = urllib.parse.quote_plus(self.__fragment)
 
-        netloc = netloc_encoded = ''
-        address = address_encoded = ''
+        self.__netloc = self.__netloc_encoded = ''
+        self.__address = self.__address_encoded = ''
 
-        if scheme:
-            address = scheme + '://'
-            address_encoded = address
+        if self.__scheme:
+            self.__address = self.__scheme + '://'
+            self.__address_encoded = self.__address
 
-        if username:
-            netloc += username
-            netloc_encoded += username_encoded
+        if self.__username:
+            self.__netloc += self.__username
+            self.__netloc_encoded += self.__username_encoded
 
-            if password:
-                netloc += ':' + password
-                netloc_encoded += ':' + password_encoded
+            if self.__password:
+                self.__netloc += ':' + self.__password
+                self.__netloc_encoded += ':' + self.__password_encoded
 
-            netloc += '@'
-            netloc_encoded += '@'
+            self.__netloc += '@'
+            self.__netloc_encoded += '@'
 
-        netloc += hostname
-        netloc_encoded += hostname_encoded
+        self.__netloc += self.__hostname
+        self.__netloc_encoded += self.__hostname_encoded
 
-        if port:
-            netloc += ':' + port
-            netloc_encoded += ':' + port
+        if self.__port and self.__port != '80':
+            self.__netloc += ':' + self.__port
+            self.__netloc_encoded += ':' + self.__port
 
-        address += netloc
-        address_encoded += netloc_encoded
+        self.__address += self.__netloc
+        self.__address_encoded += self.__netloc_encoded
 
-        if address and (path == '' or path[0] != '/'):
-            path = '/' + path
+        if self.__address and (self.__path == '' or self.__path[0] != '/'):
+            self.__path = '/' + self.__path
 
-        path = os.path.normpath(path) + ('/' if len(path) > 1 and path[-1] == '/' else '')
+        self.__path = os.path.normpath(self.__path) + ('/' if len(self.__path) > 1 and self.__path[-1] == '/' else '')
 
-        path_split = tuple(map(urllib.parse.unquote_plus, path.split('/')))
+        self.__path_split = tuple(map(urllib.parse.unquote_plus, self.__path.split('/')))
 
-        path = '/'.join(path_split)
-        path_encoded = '/'.join(map(urllib.parse.quote_plus, path_split))
+        self.__path = '/'.join(self.__path_split)
+        self.__path_encoded = '/'.join(map(urllib.parse.quote_plus, self.__path_split))
 
-        if path_split[-1] == '':
-            path_split = path_split[ : -1 ]
+        if self.__path_split[-1] == '':
+            self.__path_split = self.__path_split[ : -1 ]
 
-        parent, fname = os.path.split(path)
-        parent_encoded, file_encoded = os.path.split(path_encoded)
+        self.__parent, self.__file = os.path.split(self.__path)
+        self.__parent_encoded, self.__file_encoded = os.path.split(self.__path_encoded)
 
-        if parent == '' or parent[-1] != '/':
-            parent += '/'
-            parent_encoded += '/'
+        if self.__parent == '' or self.__parent[-1] != '/':
+            self.__parent += '/'
+            self.__parent_encoded += '/'
 
-        request = path
-        request_encoded = path_encoded
+        self.__request = self.__path
+        self.__request_encoded = self.__path_encoded
 
-        self.__query_xarray = xarray.from_query(query)
-        query_encoded = self.__query_xarray.query
+        self.__query_xarray = xarray.from_query(self.__query)
+        self.__query_encoded = self.__query_xarray.query
 
-        if query:
-            request += '?' + query
-            request_encoded += '?' + query_encoded
+        if self.__query:
+            self.__request += '?' + self.__query
+            self.__request_encoded += '?' + self.__query_encoded
 
-        if fragment:
-            request += '#' + fragment
-            request_encoded += '#' + fragment_encoded
+        if self.__fragment:
+            self.__request += '#' + self.__fragment
+            self.__request_encoded += '#' + self.__fragment_encoded
 
-        url = address + request
-        url_encoded = address_encoded + request_encoded
-
-        data_tuple = collections.namedtuple('urlhttp_data', [
-            'scheme', 'username', 'username_encoded', 'password', 'password_encoded',
-            'hostname', 'hostname_encoded', 'netloc', 'netloc_encoded', 'address', 'address_encoded',
-            'parent', 'parent_encoded', 'file', 'file_encoded', 'path', 'path_encoded',
-            'query', 'query_encoded', 'fragment', 'fragment_encoded', 'request', 'request_encoded',
-            'full', 'encoded', 'path_split', 'ssl', 'absolute', 'relative'
-        ])
-
-        self.data = data_tuple(
-            scheme, username, username_encoded, password, password_encoded,
-            hostname, hostname_encoded, netloc, netloc_encoded, address, address_encoded,
-            parent, parent_encoded, fname, file_encoded, path, path_encoded,
-            query, query_encoded, fragment, fragment_encoded, request, request_encoded,
-            url, url_encoded, path_split, scheme == 'https', address != '', address == ''
-        )
+        self.__url = self.__address + self.__request
+        self.__url_encoded = self.__address_encoded + self.__request_encoded
 
     def hyperlink (self, link, **kwargs):
 
@@ -167,13 +151,136 @@ class URLHttp (object):
         else:
             raise TypeError('Only absolute urls can hyperlink.')
 
-    def __getattribute__ (self, attr):
-        if attr != 'data':
-            try:
-                return self.data.__getattribute__(attr)
-            except AttributeError:
-                pass
-        return object.__getattribute__(self, attr)
+    def asdict (self):
+        return {
+        	'scheme': self.scheme, 'username': self.username,
+        	'password': self.password, 'hostname': self.hostname,
+        	'port': self.port, 'netloc': self.netloc,
+        	'address': self.address, 'parent': self.parent,
+        	'file': self.file, 'path': self.path,
+        	'query': self.query, 'fragment': self.fragment,
+        	'request': self.request, 'full': self.full
+        }
+
+    @property
+    def scheme (self):
+        return self.__scheme
+
+    @property
+    def username (self):
+        return self.__username
+
+    @property
+    def username_encoded (self):
+        return self.__username_encoded
+
+    @property
+    def password (self):
+        return self.__password
+
+    @property
+    def password_encoded (self):
+        return self.__password_encoded
+
+    @property
+    def hostname (self):
+        return self.__hostname
+
+    @property
+    def hostname_encoded (self):
+        return self.__hostname_encoded
+
+    @property
+    def port (self):
+        return self.__port
+
+    @property
+    def netloc (self):
+        return self.__netloc
+
+    @property
+    def netloc_encoded (self):
+        return self.__netloc_encoded
+
+    @property
+    def address (self):
+        return self.__address
+
+    @property
+    def address_encoded (self):
+        return self.__address_encoded
+
+    @property
+    def parent (self):
+        return self.__parent
+
+    @property
+    def parent_encoded (self):
+        return self.__parent_encoded
+
+    @property
+    def file (self):
+        return self.__file
+
+    @property
+    def file_encoded (self):
+        return self.__file_encoded
+
+    @property
+    def path (self):
+        return self.__path
+
+    @property
+    def path_encoded (self):
+        return self.__path_encoded
+
+    @property
+    def query (self):
+        return self.__query
+
+    @property
+    def query_encoded (self):
+        return self.__query_encoded
+
+    @property
+    def fragment (self):
+        return self.__fragment
+
+    @property
+    def fragment_encoded (self):
+        return self.__fragment_encoded
+
+    @property
+    def request (self):
+        return self.__request
+
+    @property
+    def request_encoded (self):
+        return self.__request_encoded
+
+    @property
+    def full (self):
+        return self.__url
+
+    @property
+    def encoded (self):
+        return self.__url_encoded
+
+    @property
+    def ssl (self):
+        return self.scheme == 'https'
+
+    @property
+    def absolute (self):
+        return self.address != ''
+
+    @property
+    def relative (self):
+        return self.address == ''
+
+    @property
+    def path_split (self):
+        return self.__path_split
 
     @property
     def query_xarray (self):
@@ -193,8 +300,11 @@ class URLHttp (object):
     def __hash__ (self):
         return hash(( self.address, self.path, self.query_xarray ))
 
+    def __format__ (self, _):
+        return self.full
+
     def __str__ (self):
         return self.full
 
     def __repr__ (self):
-        return str(self)
+        return 'urlhttp.URLHttp(' + repr(self.full) + ')'
