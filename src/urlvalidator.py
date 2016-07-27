@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import collections, json, urlutils, time, http.client, urllib.parse
+import collections, json, urlutils, time, http.client, urllib.parse, gzip
 
 
 class URLValidator (object):
@@ -36,8 +36,14 @@ class URLValidator (object):
                     break
 
                 url, code, headers = html
+                headers['Accept-Encoding'] = 'gzip'
 
                 rep, data = urlutils.make_request(conn, 'POST', '/nu/?out=json', body = code, headers = headers)
+
+                response_headers = urlutils.parse_headers(rep.getheaders())
+
+                if response_headers.get('content-encoding', '').lower().endswith('gzip'):
+                    data = gzip.decompress(data)
 
                 try:
                     if rep is not None:

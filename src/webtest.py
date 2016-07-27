@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-import os, sys, zlib, re, socket, uuid, signal, argparse
+import os, sys, zlib, gzip, re, socket, uuid, time, signal, argparse, textwrap
 import http.client
 import urllib.parse, urllib.request, urllib.error, urllib.robotparser
 
@@ -17,6 +17,7 @@ if __name__ == '__main__':
     PROG_URL = 'https://github.com/dev-marco/website-tester'
 
     DEFAULT_UA = 'Webtestbot/{0} (+{1})'.format(PROG_VERSION, PROG_URL)
+    start_t = time.time()
 
     parser = argparse.ArgumentParser(description = 'Crawl a website searching for issues', epilog = PROG_URL, fromfile_prefix_chars = '@', formatter_class = argparse.RawTextHelpFormatter)
     parser.add_argument('urls', nargs = '+', help = 'list of urls to be checked', type = urlhttp.URLHttp)
@@ -31,53 +32,75 @@ if __name__ == '__main__':
     group.add_argument('-no-css', action = 'store_true', help = 'do not extract links from CSS files')
 
     group = parser.add_argument_group('Validation options')
-    group.add_argument('-valid-html', action = 'store_true', help = 'validate HTML online using W3C validator\navailable at https://validator.w3.org/')
+    group.add_argument('-valid-html', action = 'store_true', help = 'validate HTML online using W3C validator\navailable at https://validator.nu/')
     group.add_argument('-valid-css', action = 'store_true', help = 'validate CSS online using W3C validator\navailable at https://jigsaw.w3.org/css-validator/')
     group.add_argument('-valid-js', action = 'store_true', help = 'validate JavaSript online using Google Closure\navailable at https://closure-compiler.appspot.com/')
-    group.add_argument('-valid-result-dir', metavar = 'DIR', default = uuid.uuid4().hex, help = 'directory to save validation results', type = urlutils.normalize_filepath)
+    group.add_argument('-valid-result-dir',
+        metavar = 'DIR',
+        default = 'validation_' + time.strftime('%Y%m%d-%H%M%S', time.gmtime(start_t)) + '{0:.05f}'.format(start_t - int(start_t))[ 1 : ] + 'UTC',
+        help = 'directory to save validation results', type = urlutils.normalize_filepath
+    )
 
     group = parser.add_argument_group('Request data')
     group.add_argument('-timeout', metavar = 'SEC', default = 5.0, type = float, help = 'timeout time (seconds) for http requests')
     group.add_argument('-user-agent', metavar = 'UA', default = DEFAULT_UA, help = 'user-agent reported to websites\nalso used to match robots.txt (if enabled)')
     group.add_argument('--cookies',
         nargs = '+', default = [], metavar = 'COOKIE',
-        help = 'cookies to use (replaced by websites), syntax:\n' +
-        '"NAME=VAL [ ; Path=PATH ] [ ; Domain=DOMAIN ]\n' +
-        '[ ; HttpOnly ] [ ; Secure ] [ ; Max-Age=SECONDS ]\n' +
-        '[ ; Expires=RFC1123_DATETIME ] [ ; ... ]"'
+        help = textwrap.dedent("""\
+            cookies to use (replaced by websites), syntax:
+            "NAME=VAL [ ; Path=PATH ] [ ; Domain=DOMAIN ]
+            [ ; Max-Age=SECONDS ] [ ; Expires=RFC1123_DATETIME ]
+            [ ; HttpOnly ] [ ; Secure ] [ ; ... ]"
+        """)
     )
     group.add_argument('--fixed-cookies',
         nargs = '+', default = [], metavar = 'COOKIE',
-        help = 'cookies to use (not replaced by websites), syntax:\n' +
-        '"NAME=VAL [ ; Path=PATH ] [ ; Domain=DOMAIN ]\n' +
-        '[ ; HttpOnly ] [ ; Secure ] [ ; Max-Age=SECONDS ]\n' +
-        '[ ; Expires=RFC1123_DATETIME ] [ ; ... ]"'
+        help = textwrap.dedent("""\
+            cookies to use (replaced by websites), syntax:
+            "NAME=VAL [ ; Path=PATH ] [ ; Domain=DOMAIN ]
+            [ ; Max-Age=SECONDS ] [ ; Expires=RFC1123_DATETIME ]
+            [ ; HttpOnly ] [ ; Secure ] [ ; ... ]"
+        """)
     )
     group.add_argument('--headers', nargs = '+', default = [], metavar = 'HEADER', help = 'headers to send, syntax:\n"NAME=VAL"')
 
-    group = parser.add_argument_group('Link matching rules')
+    group = parser.add_argument_group('Link matching rules',
+        description = textwrap.dedent("""\
+            Files should be utf-8
+            Special keywords (matches every starting url parameter):
+            Format: [*PARAMETER*]
+            Available parameters (case sentitive):
+                scheme, username, password, hostname, port
+                netloc, address, parent, file, path, query
+                fragment, request, full
+        """)
+    )
     group.add_argument('--include-rules',
         nargs = '+', default = [], metavar = 'RULE',
-        help = 'regex rules to match pages to find urls on\n' +
-        '[%%url%%] matches every initial url netloc'
+        help = textwrap.dedent("""\
+            regex rules to match pages to find urls on
+        """)
     )
     group.add_argument('--include-rules-files',
         nargs = '+', default = [], metavar = 'FILE',
-        help = 'file of regex rules to match pages to find urls on\n' +
-        '[%%url%%] matches every initial url netloc\n' +
-        'One regex per line, lines starting with # are ignored'
+        help = textwrap.dedent("""\
+            file of regex rules to match pages to find urls on
+            one regex per line, lines starting with # are ignored
+        """)
     )
 
     group.add_argument('--exclude-rules',
         nargs = '+', default = [], metavar = 'RULE',
-        help = 'regex rules to match pages NOT to find urls on\n' +
-        '[%%url%%] matches every initial url netloc'
+        help = textwrap.dedent("""\
+            regex rules to match pages NOT to find urls on
+        """)
     )
     group.add_argument('--exclude-rules-files',
         nargs = '+', default = [], metavar = 'FILE',
-        help = 'file of regex rules to match pages NOT to find urls on\n' +
-        '[%%url%%] matches every initial url netloc\n' +
-        'One regex per line, lines starting with # are ignored'
+        help = textwrap.dedent("""\
+            file of regex rules to match pages NOT to find urls on
+            one regex per line, lines starting with # are ignored
+        """)
     )
 
     args = parser.parse_args()
@@ -93,21 +116,21 @@ if __name__ == '__main__':
     urls = urldeque.URLDeque()
 
     args.headers = { name.title() : value for name, value in ( header.split('=') for header in args.headers ) }
-    args.headers['Accept-Encoding'] = 'gzip, deflate'
     args.headers['User-Agent'] = args.user_agent
+    args.headers.setdefault('Accept-Encoding', 'gzip, deflate')
     args.headers.setdefault('Connection', 'keep-alive')
     args.headers.setdefault('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
 
-    args.include_rules = args.include_rules or [ r'^https?://[%url%].*$' ]
+    args.include_rules = args.include_rules or [ r'^https?://[*netloc*].*$' ]
 
-    args.include_rules = list(rule for r in args.include_rules for rule in urlutils.compile_rule(r, args.urls))
-    args.exclude_rules = list(rule for r in args.exclude_rules for rule in urlutils.compile_rule(r, args.urls))
+    args.include_rules = urlutils.compile_rules(args.include_rules, args.urls)
+    args.exclude_rules = urlutils.compile_rules(args.exclude_rules, args.urls)
 
     for fname in args.include_rules_files:
-        args.include_rules.extend(urlutils.read_rules(fname, args.urls))
+        args.include_rules.update(urlutils.read_rules(fname, args.urls))
 
     for fname in args.exclude_rules_files:
-        args.exclude_rules.extend(urlutils.read_rules(fname, args.urls))
+        args.exclude_rules.update(urlutils.read_rules(fname, args.urls))
 
     if 'Cookie' in args.headers:
         cookies = tuple(map(str.strip, args.headers.pop('Cookie').split(';')))
@@ -153,6 +176,12 @@ if __name__ == '__main__':
         js_process = mp.Process(target = urlvalidator.URLValidator.thread_js, args = ( js_queue, js_result ))
         js_process.start()
 
+    decompress = {
+        'gzip': gzip,
+        'x-gzip': gzip,
+        'deflate': zlib.decompressobj(wbits = zlib.MAX_WBITS)
+    }
+
     try:
         while not urls.empty:
 
@@ -191,6 +220,7 @@ if __name__ == '__main__':
 
                     else:
                         cookies.clear_expired()
+                        fixed_cookies.clear_expired()
                         url_cookies = fixed_cookies | cookies
 
                         request_headers = args.headers.copy()
@@ -270,10 +300,8 @@ if __name__ == '__main__':
 
                                 # TODO accept brotli compression
                                 if 'content-encoding' in response_headers:
-                                    if response_headers['content-encoding'][0] == 'gzip':
-                                        response_data = zlib.decompress(response_data, 16 + zlib.MAX_WBITS)
-                                    elif response_headers['content-encoding'][0] == 'deflate':
-                                        response_data = zlib.decompress(response_data, 0)
+                                    method = response_headers['content-encoding'][0]
+                                    response_data = decompress[method].decompress(response_data)
 
                                 if 'charset' in content_type:
                                     data = response_data.decode(content_type['charset'], errors = 'ignore')
@@ -290,7 +318,10 @@ if __name__ == '__main__':
                                     charset = html.charset
 
                                     if args.valid_html:
-                                        html_queue.put(( url, response_data, { 'Content-Type': response_headers['content-type'][0] } ))
+                                        html_queue.put(( url, gzip.compress(response_data), {
+                                            'Content-Type': response_headers['content-type'][0],
+                                            'Content-Encoding': 'gzip'
+                                        } ))
 
                                     for link, element, attr in html.urls:
                                         if http != 'href' or element['attrs'].get('rel', '') != 'nofollow':
