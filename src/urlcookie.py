@@ -211,7 +211,7 @@ class CookieJar (object):
 
             result = Cookie(name, value, **params)
 
-            if params['domain'] == domain:
+            if params['domain'].lstrip('.') == domain:
                 self.add_cookie(result)
             elif result.match(scheme, domain, path, test_expired = False, test_secure = False):
                 header.set(( 'Set-Cookie', data ))
