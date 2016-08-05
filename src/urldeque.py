@@ -13,6 +13,9 @@ class InfiniteRedirection (Exception):
     def __repr__ (self):
         return str(self.value)
 
+    def __str__ (self):
+        return str(self.value)
+
     @property
     def urls (self):
         return self.__urls
