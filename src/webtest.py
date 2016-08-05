@@ -26,7 +26,7 @@ if __name__ == '__main__':
     parser.add_argument('-color', action = 'store_true', help = 'enable terminal colors')
 
     group = parser.add_argument_group('Disable options')
-    group.add_argument('-no-robots', action = 'store_false', help = 'ignore websites robots.txt rules (NOT RECOMMENDED)')
+    group.add_argument('-no-robots', action = 'store_true', help = 'ignore websites robots.txt rules (NOT RECOMMENDED)')
     group.add_argument('-no-redirect', action = 'store_true', help = 'ignore website redirection')
     group.add_argument('-no-cookies', action = 'store_true', help = 'ignore website cookies')
     group.add_argument('-no-css', action = 'store_true', help = 'do not extract links from CSS files')
@@ -215,7 +215,7 @@ if __name__ == '__main__':
 
                     url, ref, cookies, charset = urls.pop_url()
 
-                    if robots is not None and not robots.can_fetch(user_agent, url.encoded):
+                    if robots is not None and not robots.can_fetch(args.user_agent, url.encoded):
                         print(Color.YELLOW % 'Robot not allowed at {0}'.format(url.full))
 
                     else:
