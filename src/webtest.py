@@ -115,7 +115,7 @@ if __name__ == '__main__':
 
     urls = urldeque.URLDeque()
 
-    args.headers = { name.title() : value for name, value in ( header.split('=') for header in args.headers ) }
+    args.headers = { name.title() : value for name, value in ( header.split('=', 1) for header in args.headers ) }
     args.headers['User-Agent'] = args.user_agent
     args.headers.setdefault('Accept-Encoding', 'gzip, deflate')
     args.headers.setdefault('Connection', 'keep-alive')
@@ -133,7 +133,7 @@ if __name__ == '__main__':
         args.exclude_rules.update(urlutils.read_rules(fname, args.urls))
 
     if 'Cookie' in args.headers:
-        cookies = tuple(map(str.strip, args.headers.pop('Cookie').split(';')))
+        cookies = tuple(map(str.strip, args.headers.pop('Cookie').split(';', 1)))
         for url in args.urls:
             start_cookies.set(url.encoded, *cookies)
 
@@ -212,7 +212,6 @@ if __name__ == '__main__':
             while not urls.empty_domain:
 
                 try:
-
                     url, ref, cookies, charset = urls.pop_url()
 
                     if robots is not None and not robots.can_fetch(args.user_agent, url.encoded):
