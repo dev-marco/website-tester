@@ -226,7 +226,7 @@ if __name__ == '__main__':
 
                         if url_cookies:
                             cookie_txt = '; '.join(map(str, url_cookies.match(url.scheme, url.hostname_encoded, url.path_encoded)))
-                            if 'Cookie' in request_headers and request_headers['Cookie']:
+                            if request_headers.get('Cookie', ''):
                                 cookie_txt = request_headers['Cookie'] + '; ' + cookie_txt
                             request_headers['Cookie'] = cookie_txt
 
@@ -283,7 +283,7 @@ if __name__ == '__main__':
                             if not include:
                                 continue
 
-                            content_type = urlutils.content_split(response_headers['content-type'][0])
+                            content_type = urlutils.content_split(response_headers.get('content-type', [ 'application/octet-stream; charset=iso-8859-1' ])[0])
 
                             is_html = 'text/html' in content_type or 'application/xhtml+xml' in content_type
                             is_css = 'text/css' in content_type
@@ -323,7 +323,7 @@ if __name__ == '__main__':
                                         } ))
 
                                     for link, element, attr in html.urls:
-                                        if http != 'href' or element['attrs'].get('rel', '') != 'nofollow':
+                                        if http != 'href' or element['attrs'].get('rel') != 'nofollow':
                                             if not args.no_redirect and element['tag'] == 'meta' and element['attrs'].get('http-equiv', '').lower() == 'refresh' and attr == 'content':
                                                 redirect = link
                                             else:
